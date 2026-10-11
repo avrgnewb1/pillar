@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+<title>Chocolate Berry Protein Shake</title>
+<path d="M17 4 H31 V9 H17 Z" stroke="#e8eefc"/>
+<path d="M15 9 H33 L32 41 Q32 44 29 44 H19 Q16 44 16 41 Z" stroke="#e8eefc"/>
+<path d="M16.4 20 H31.6" stroke="#93a1bf"/>
+<circle cx="21" cy="30" r="3" stroke="#f472b6"/>
+<circle cx="27.5" cy="34" r="3" stroke="#f472b6"/>
+</svg>

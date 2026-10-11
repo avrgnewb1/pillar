@@ -1,0 +1,17 @@
+# Netlify / Cloudflare Pages headers
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+/app/sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /app/
+
+/app/manifest.json
+  Content-Type: application/manifest+json
+  Cache-Control: no-cache
+
+/app/index.html
+  Cache-Control: no-cache

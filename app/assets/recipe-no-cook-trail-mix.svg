@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+<title>No-Cook Trail Mix</title>
+<path d="M17 6 H31 V11 H17 Z" stroke="#e8eefc"/>
+<path d="M17 11 Q11 13 11 19 V38 Q11 43 16 43 H32 Q37 43 37 38 V19 Q37 13 31 11" stroke="#e8eefc"/>
+<ellipse cx="19" cy="33" rx="3.5" ry="2.5" stroke="#f59e0b"/>
+<ellipse cx="28.5" cy="34.5" rx="3" ry="2.2" stroke="#93a1bf"/>
+<ellipse cx="25" cy="26" rx="3.2" ry="2.3" transform="rotate(-25 25 26)" stroke="#f59e0b"/>
+</svg>

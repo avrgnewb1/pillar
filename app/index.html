@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1120">
+<title>Pillar – Gain Weight &amp; Build Muscle</title>
+<meta name="description" content="Pillar: an offline weight-gain and muscle-building tracker for meals, workouts and progress.">
+<meta name="application-name" content="Pillar">
+<meta name="apple-mobile-web-app-title" content="Pillar">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon-180.png" sizes="180x180">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><div><h1><img src="assets/logo-wordmark.svg" alt="Pillar" class="wordmark" width="112" height="43"></h1><p class="tag">Eat more. Lift smart. Grow.</p></div></div>
+    <button class="icon-btn" id="editProfileBtn" title="Edit goals" aria-label="Edit goals">⚙️</button>
+  </header>
+
+  <main>
+    <!-- TODAY / MEALS -->
+    <section id="tab-today" class="tab active" aria-label="Today">
+      <div class="date-nav card slim">
+        <button class="icon-btn" id="prevDay" aria-label="Previous day">‹</button>
+        <div class="date-label" id="dateLabel">Today</div>
+        <button class="icon-btn" id="nextDay" aria-label="Next day">›</button>
+      </div>
+      <div id="adaptBanner"></div>
+      <div class="card">
+        <div class="card-head"><h2>Daily goals</h2><span class="muted small" id="kcalLeft"></span></div>
+        <div id="progressBars"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Quick add</h2><button class="btn ghost small-btn" id="customFoodBtn">+ Custom food</button></div>
+        <div id="quickStrip"></div>
+        <input type="search" id="foodSearch" class="input" placeholder="Search foods (peanut butter, milk, rice…)" autocomplete="off">
+        <div class="chips" id="foodCats"></div>
+        <div id="foodList" class="food-list"></div>
+        <p class="muted tiny">Nutrition values are <strong>approximate</strong> and vary by brand and preparation. Check labels when you can.</p>
+      </div>
+      <div class="card suggest">
+        <div class="card-head"><h2>🤔 What should I eat?</h2><button class="btn ghost small-btn" id="shuffleSuggest">Shuffle</button></div>
+        <p class="muted small" id="suggestIntro"></p>
+        <div id="suggestList"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Logged today</h2><span class="muted small" id="mealCount"></span></div>
+        <ul id="mealLog" class="log-list"></ul>
+      </div>
+      <div class="card tips">
+        <div class="card-head"><h2>💡 Easy calorie wins</h2><button class="btn ghost small-btn" id="nextTip">Next tip</button></div>
+        <p id="tipText" class="tip-text"></p>
+        <ul class="tip-list">
+          <li><strong>Drink calories:</strong> a peanut butter banana oat shake is ~810 kcal (approx.) and goes down in minutes. Recipe in Learn.</li>
+          <li><strong>Add a 4th or 5th meal:</strong> a bedtime snack of Greek yogurt + granola adds 400+ kcal.</li>
+          <li><strong>Cook with fats:</strong> 1 tbsp olive oil = ~120 kcal and you barely notice it.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- TRAIN -->
+    <section id="tab-train" class="tab" aria-label="Train">
+      <div class="card">
+        <div class="seg" id="planSeg">
+          <button data-plan="beginner" class="active">Beginner · 3-day</button>
+          <button data-plan="intermediate">Intermediate · 4-day</button>
+        </div>
+        <p class="muted small" id="planDesc"></p>
+        <div class="chips" id="daySeg"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2 id="workoutTitle">Workout</h2><span class="muted small" id="workoutDate"></span></div>
+        <div id="exerciseList"></div>
+        <label class="field"><span>Notes (optional)</span><input class="input" id="workoutNotes" placeholder="How did it feel?"></label>
+        <button class="btn primary block" id="saveWorkout">✓ Log this workout</button>
+      </div>
+      <div class="card overload">
+        <h2>📈 Progressive overload</h2>
+        <ul>
+          <li>Pick a weight you can lift for the bottom of the rep range with 1–2 reps left in the tank.</li>
+          <li>When you hit the <strong>top of the rep range on all sets</strong>, add weight next time: +5 lb (2.5 kg) upper body, +10 lb (5 kg) lower body.</li>
+          <li>If you stall for 3 sessions, check food & sleep first, then drop the weight 10% and build back up.</li>
+          <li>Form first. Controlled reps, full range of motion. Muscle needs a surplus to grow, so eat!</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Workout history</h2><span class="muted small" id="workoutWeek"></span></div>
+        <ul id="workoutHistory" class="log-list"></ul>
+      </div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section id="tab-progress" class="tab" aria-label="Progress">
+      <div class="card">
+        <div class="card-head"><h2>Log weight</h2></div>
+        <div class="row">
+          <input type="date" id="weightDate" class="input">
+          <input type="number" id="weightInput" class="input" step="0.1" min="20" inputmode="decimal" placeholder="Weight">
+          <span class="unit" id="weightUnitLabel">lb</span>
+          <button class="btn primary" id="addWeight">Add</button>
+        </div>
+      </div>
+      <div id="adaptBanner2"></div>
+      <div class="stats" id="statCards"></div>
+      <div class="card">
+        <div class="card-head"><h2>Weight trend</h2>
+          <div class="seg mini" id="rangeSeg"><button data-range="30" class="active">30d</button><button data-range="90">90d</button><button data-range="all">All</button></div>
+        </div>
+        <div id="chart" class="chart"></div>
+        <div class="legend"><span><i class="dot d-weight"></i>Weigh-ins</span><span><i class="line l-avg"></i>7-day avg</span><span><i class="line l-target"></i>Target pace</span></div>
+        <p id="paceMsg" class="pace-msg"></p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Weekly averages</h2></div>
+        <table class="table" id="weeklyTable"></table>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Body measurements <span class="muted small">(optional)</span></h2></div>
+        <div class="grid4">
+          <label class="field"><span>Chest</span><input type="number" step="0.1" class="input" id="mChest"></label>
+          <label class="field"><span>Arms</span><input type="number" step="0.1" class="input" id="mArms"></label>
+          <label class="field"><span>Waist</span><input type="number" step="0.1" class="input" id="mWaist"></label>
+          <label class="field"><span>Thighs</span><input type="number" step="0.1" class="input" id="mThighs"></label>
+        </div>
+        <button class="btn ghost block" id="addMeasure">Save measurements (<span id="measUnit">in</span>)</button>
+        <table class="table" id="measureTable"></table>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Weigh-in history</h2></div>
+        <ul id="weightHistory" class="log-list"></ul>
+      </div>
+    </section>
+
+    <!-- LEARN -->
+    <section id="tab-learn" class="tab" aria-label="Learn">
+      <div class="seg" id="learnSeg"><button data-l="recipes" class="active">Recipes</button><button data-l="tips">Appetite tips</button><button data-l="faq">FAQ</button><button data-l="sources">Sources</button></div>
+      <div id="learn-recipes" class="lpane">
+        <p class="muted small pad">Calories and protein are <strong>approximate</strong>, worked out from standard USDA FoodData Central-style values for generic foods. Brands differ a lot (especially protein powder, bread, granola and chocolate), so check your labels and log what you actually use.</p>
+        <div id="recipeList"></div>
+      </div>
+      <div id="learn-tips" class="lpane" hidden><div class="card"><h2>Eating enough with a small appetite</h2><ol id="tipsList" class="learn-list"></ol></div></div>
+      <div id="learn-faq" class="lpane" hidden><div id="faqList"></div></div>
+      <div id="learn-sources" class="lpane" hidden><div class="card"><h2>Sources</h2><ul id="sourceList" class="source-list"></ul></div></div>
+      <div class="card disclaimer">
+        <strong>⚠️ Not medical advice.</strong> This is general information for healthy adults and doesn't replace advice from a qualified professional. Calorie and protein numbers are estimates.
+        <p>Please see a doctor or a registered dietitian before you start if you:</p>
+        <ul><li>have lost weight without trying, or lost weight suddenly</li><li>can't gain weight even though you're eating more</li><li>have, or think you might have, an eating disorder, or use controlling food to cope with feelings</li><li>have a medical condition (e.g., digestive, thyroid, diabetes, kidney or heart issues), are pregnant or breastfeeding, take medications, or are under 18</li></ul>
+        <p><strong>If you're struggling with eating:</strong> In the US, you can reach the 988 Suicide &amp; Crisis Lifeline by calling or texting 988. In the UK, Beat (beateatingdisorders.org.uk) offers eating disorder support.</p>
+      </div>
+    </section>
+
+    <!-- PLAN -->
+    <section id="tab-plan" class="tab" aria-label="Plan">
+      <div class="card hero" id="planSummary"></div>
+      <div class="card">
+        <h2>How your numbers are calculated</h2>
+        <div id="planMath" class="math"></div>
+      </div>
+      <div class="card">
+        <h2>Your data</h2>
+        <p class="muted small">Everything is saved only on this device (browser localStorage). No account, no cloud.</p>
+        <div class="row wrap">
+          <button class="btn ghost" id="redoOnboarding">Recalculate goals</button>
+          <button class="btn ghost" id="exportData">Export backup</button>
+          <label class="btn ghost file-btn">Import backup<input type="file" id="importData" accept="application/json" hidden></label>
+          <button class="btn danger" id="resetData">Reset all data</button>
+        </div>
+      </div>
+      <div class="card disclaimer">
+        <strong>⚠️ Not medical advice.</strong> Pillar gives general fitness and nutrition estimates for healthy adults. Talk to a doctor or registered dietitian before big changes to diet or exercise, especially if you have a medical condition, an eating disorder history, or are under 18.
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" id="bottomNav">
+    <button data-tab="today" class="active"><span>🍽️</span>Eat</button>
+    <button data-tab="train"><span>🏋️</span>Train</button>
+    <button data-tab="progress"><span>📈</span>Progress</button>
+    <button data-tab="learn"><span>📚</span>Learn</button>
+    <button data-tab="plan"><span>🎯</span>Plan</button>
+  </nav>
+</div>
+
+<!-- ONBOARDING -->
+<div class="overlay" id="onboarding" hidden>
+  <div class="sheet">
+    <div class="ob-head">
+      <img src="assets/logo.svg" alt="" class="ob-logo" width="72" height="72">
+      <h2>Welcome to Pillar</h2>
+      <p class="muted">Let's work out how much you need to eat to gain weight and build muscle.</p>
+    </div>
+    <form id="obForm" novalidate>
+      <div class="grid2">
+        <label class="field"><span>Age</span><input class="input" type="number" id="obAge" min="14" max="90" value="22" required></label>
+        <div class="field"><span>Sex</span>
+          <div class="seg" id="obSex"><button type="button" data-v="male" class="active">Male</button><button type="button" data-v="female">Female</button></div>
+        </div>
+      </div>
+      <div class="field">
+        <span>Height <span class="seg mini inline" id="obHUnit"><button type="button" data-v="ftin" class="active">ft/in</button><button type="button" data-v="cm">cm</button></span></span>
+        <div class="row" id="hFtIn"><input class="input" type="number" id="obFt" min="3" max="8" value="5"><span class="unit">ft</span><input class="input" type="number" id="obIn" min="0" max="11.9" step="0.5" value="10"><span class="unit">in</span></div>
+        <div class="row" id="hCm" hidden><input class="input" type="number" id="obCm" min="120" max="230" value="178"><span class="unit">cm</span></div>
+      </div>
+      <div class="field">
+        <span>Current weight <span class="seg mini inline" id="obWUnit"><button type="button" data-v="lb" class="active">lb</button><button type="button" data-v="kg">kg</button></span></span>
+        <div class="row"><input class="input" type="number" id="obWeight" min="30" max="700" step="0.1" value="140"><span class="unit" id="obWLabel">lb</span></div>
+      </div>
+      <label class="field"><span>Activity level</span>
+        <select class="input" id="obActivity">
+          <option value="1.2">Sedentary – desk job, little exercise</option>
+          <option value="1.375">Light – exercise 1–3 days/week</option>
+          <option value="1.55" selected>Moderate – exercise 3–5 days/week</option>
+          <option value="1.725">Very active – hard exercise 6–7 days/week</option>
+          <option value="1.9">Extra active – physical job + training</option>
+        </select>
+      </label>
+      <div class="field"><span>Goal pace</span>
+        <div class="pace-opts" id="obPace">
+          <button type="button" data-v="lean" class="active"><strong>Lean bulk</strong><small>+10% kcal · ~0.25% bodyweight/wk</small></button>
+          <button type="button" data-v="steady"><strong>Steady</strong><small>+15% kcal · ~0.375% bodyweight/wk</small></button>
+          <button type="button" data-v="fast"><strong>Faster</strong><small>+20% kcal · ~0.5% bodyweight/wk</small></button>
+        </div>
+      </div>
+      <label class="field"><span>Protein target: <strong id="obProtLabel">1.8</strong> g/kg bodyweight <span id="obProtLb" class="muted">(≈0.82 g/lb)</span></span>
+        <input type="range" id="obProtein" min="1.6" max="2.2" step="0.1" value="1.8">
+      </label>
+      <div class="ob-result" id="obResult"></div>
+      <p class="muted tiny">Estimates only, not medical advice.</p>
+      <button type="submit" class="btn primary block big-btn">Save my plan →</button>
+    </form>
+  </div>
+</div>
+
+<!-- CUSTOM FOOD / SERVING MODAL -->
+<div class="overlay" id="foodModal" hidden>
+  <div class="sheet small-sheet">
+    <h2 id="fmTitle">Add food</h2>
+    <form id="fmForm">
+      <label class="field"><span>Food name</span><input class="input" id="fmName" required></label>
+      <div class="grid2">
+        <label class="field"><span>Calories</span><input class="input" type="number" id="fmKcal" min="0" step="1" required></label>
+        <label class="field"><span>Protein (g)</span><input class="input" type="number" id="fmProt" min="0" step="0.1" required></label>
+        <label class="field"><span>Carbs (g, optional)</span><input class="input" type="number" id="fmCarb" min="0" step="0.1"></label>
+        <label class="field"><span>Fat (g, optional)</span><input class="input" type="number" id="fmFat" min="0" step="0.1"></label>
+      </div>
+      <label class="field"><span>Servings</span><input class="input" type="number" id="fmServ" min="0.25" step="0.25" value="1"></label>
+      <label class="check"><input type="checkbox" id="fmSave" checked> Save to my foods for next time</label>
+      <div class="row end"><button type="button" class="btn ghost" id="fmCancel">Cancel</button><button class="btn primary" type="submit">Add</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="content.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
