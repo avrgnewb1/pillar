@@ -104,6 +104,7 @@
           <button class="btn primary" id="addWeight">Add</button>
         </div>
       </div>
+      <div id="sharePrompt" class="share-prompt" hidden><span>Nice weigh-in! Want to share your progress?</span><button class="btn primary small-btn" data-open-share>Share progress</button><button class="del" id="sharePromptClose" aria-label="Dismiss">✕</button></div>
       <div id="adaptBanner2"></div>
       <div class="stats" id="statCards"></div>
       <div class="card">
@@ -113,6 +114,7 @@
         <div id="chart" class="chart"></div>
         <div class="legend"><span><i class="dot d-weight"></i>Weigh-ins</span><span><i class="line l-avg"></i>7-day avg</span><span><i class="line l-target"></i>Target pace</span></div>
         <p id="paceMsg" class="pace-msg"></p>
+        <button class="btn ghost block share-btn" id="shareProgressBtn" data-open-share>📤 Share progress</button>
       </div>
       <div class="card">
         <div class="card-head"><h2>Weekly averages</h2></div>
@@ -251,6 +253,33 @@
       <label class="check"><input type="checkbox" id="fmSave" checked> Save to my foods for next time</label>
       <div class="row end"><button type="button" class="btn ghost" id="fmCancel">Cancel</button><button class="btn primary" type="submit">Add</button></div>
     </form>
+  </div>
+</div>
+
+<!-- SHARE PROGRESS SHEET -->
+<div class="overlay" id="shareSheet" hidden>
+  <div class="sheet share-sheet" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <div class="card-head"><h2 id="shareTitle">Share progress</h2><button class="icon-btn" id="shareClose" aria-label="Close">✕</button></div>
+    <div id="shareEmpty" class="share-empty" hidden>
+      <img src="assets/empty-weighins.svg" alt="" width="150" height="112">
+      <p><strong>Log at least 2 weigh-ins</strong> to make a progress card.</p>
+      <p class="muted small" id="shareEmptyCount"></p>
+      <button class="btn primary" id="shareGoLog">Log a weigh-in</button>
+    </div>
+    <div id="shareBody">
+      <div class="share-controls">
+        <div class="seg" id="shareFormat"><button data-f="story" class="active">Story 9:16</button><button data-f="square">Square 1:1</button></div>
+        <div class="seg mini" id="shareRange"><button data-range="30">30d</button><button data-range="90">90d</button><button data-range="all">All</button></div>
+      </div>
+      <label class="check share-toggle"><input type="checkbox" id="shareHideWeight" checked> Hide exact body weight (show change only)</label>
+      <div class="share-preview"><canvas id="shareCanvas" width="1080" height="1920" aria-label="Progress card preview"></canvas></div>
+      <p class="muted tiny center">Made on your device. Nothing is uploaded. Units follow your setting (<span id="shareUnit">lb</span>).</p>
+      <div class="share-actions">
+        <button class="btn primary" id="shareNative" hidden>Share…</button>
+        <button class="btn ghost" id="shareDownload">Download PNG</button>
+        <button class="btn ghost" id="shareCopyLink">Copy link</button>
+      </div>
+    </div>
   </div>
 </div>
 

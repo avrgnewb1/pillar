@@ -1,5 +1,5 @@
 /* Pillar service worker: precaches the app shell so it works offline. Personal data lives in localStorage, never in this cache. */
-const CACHE = 'pillar-v1';
+const CACHE = 'pillar-v2';
 const ASSETS = [
   "./",
   "./index.html",

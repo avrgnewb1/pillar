@@ -639,6 +639,7 @@
       S.weights = S.weights.filter(w => w.date !== d); S.weights.push({ date: d, kg: fromDispW(v) });
       S.weights.sort((a, b) => a.date.localeCompare(b.date));
       $('#weightInput').value = ''; save(); renderProgress(); toast('Weight logged');
+      if (S.weights.length >= 2) $('#sharePrompt').hidden = false;
     });
     $('#weightInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#addWeight').click(); });
     $('#weightHistory').addEventListener('click', e => { if (e.target.id === 'toggleW') { showAllW = !showAllW; renderProgress(); return; } const b = e.target.closest('[data-del-wt]'); if (!b) return; S.weights = S.weights.filter(w => w.date !== b.dataset.delWt); save(); renderProgress(); });
@@ -650,6 +651,183 @@
       S.measurements.push(m); ['#mChest', '#mArms', '#mWaist', '#mThighs'].forEach(i => $(i).value = ''); save(); renderMeasurements(); toast('Measurements saved');
     });
     $('#measureTable').addEventListener('click', e => { const b = e.target.closest('[data-del-m]'); if (!b) return; S.measurements = S.measurements.filter(m => m.id !== b.dataset.delM); save(); renderMeasurements(); });
+  }
+
+  /* ---------------- Share progress card (canvas, fully offline) ---------------- */
+  const SITE_URL = 'https://avrgnewb1.github.io/pillar/';
+  const LOGO_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256"><path fill="#4ade80" d="M12 19Q12 17 13.95 16.56L50.05 8.44Q52 8 52 10L52 13Q52 15 50.05 15.44L13.95 23.56Q12 24 12 22Z"/><path fill="#22c55e" d="M16 28.3Q16 27.1 17.17 26.84L22.83 25.56Q24 25.3 24 26.5L24 44.3Q24 45.5 22.8 45.5L17.2 45.5Q16 45.5 16 44.3ZM28 25.6Q28 24.4 29.17 24.14L34.83 22.86Q36 22.6 36 23.8L36 44.3Q36 45.5 34.8 45.5L29.2 45.5Q28 45.5 28 44.3ZM40 22.9Q40 21.7 41.17 21.44L46.83 20.16Q48 19.9 48 21.1L48 44.3Q48 45.5 46.8 45.5L41.2 45.5Q40 45.5 40 44.3Z"/><path fill="#16a34a" d="M12 51Q12 49 14 49L50 49Q52 49 52 51L52 54Q52 56 50 56L14 56Q12 56 12 54Z"/></svg>');
+  const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  const share = { format: 'story', hide: true, blob: null, logo: null };
+  function loadLogo() {
+    if (share.logo) return Promise.resolve(share.logo);
+    return new Promise(res => { const i = new Image(); i.onload = () => { share.logo = i; res(i); }; i.onerror = () => res(null); i.src = LOGO_SVG; });
+  }
+  function shareData() {
+    const ws = sortedWeights(); const t = today(); const u = wUnit();
+    if (ws.length < 2) return { ok: false, count: ws.length };
+    const start = S.profile && S.profile.startWeightKg != null ? S.profile.startWeightKg : ws[0].kg;
+    const startDate = S.profile && S.profile.startDate && S.profile.startDate <= ws[0].date ? S.profile.startDate : ws[0].date;
+    const last = ws[ws.length - 1];
+    const recent = ws.filter(w => w.date >= addDays(t, -27));
+    const slope = slopeKgPerWeek(recent.length >= 2 ? recent : ws);
+    const days = daysBetween(ws[0].date, last.date);
+    const from = S.ui.range === 'all' ? ws[0].date : addDays(t, -(+S.ui.range - 1));
+    const pts = ws.filter(w => w.date >= from);
+    return {
+      ok: true, u, ws, pts, from: pts.length >= 2 ? pts[0].date : ws[ws.length - 2].date, to: t,
+      start, startDate, cur: last.kg, delta: toDispW(last.kg) - toDispW(start),
+      slope: slope == null ? null : toDispW(slope), target: S.goals ? (u === 'lb' ? S.goals.lbwk : S.goals.lbwk * LB) : null,
+      weeks: Math.max(1, Math.round(days / 7)), days,
+      foodStreak: streak(d => dayMeals(d).length > 0), wStreak: streak(d => ws.some(w => w.date === d)),
+      workouts: S.workouts.filter(w => w.date >= weekStart(t)).length, workoutGoal: S.ui.plan === 'beginner' ? 3 : 4,
+    };
+  }
+  const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(round(v, d));
+  function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function drawCard(canvas, D, opts) {
+    const story = opts.format === 'story';
+    const W = 1080, H = story ? 1920 : 1080; canvas.width = W; canvas.height = H;
+    const c = canvas.getContext('2d'); const u = D.u; const P = 72, cw = W - P * 2;
+    const L = story
+      ? { hy: 96, ls: 104, brand: 68, tag: 30, label: 36, labelY: 330, big: 190, bigGap: 170, sub: 38, subGap: 66, exactGap: 56, chartGap: 56, footH: 150, gridRows: 3, cols: 2, bh: 170, gap: 24, sLab: 28, sVal: 56, sPad: 30 }
+      : { hy: 56, ls: 80, brand: 54, tag: 25, label: 28, labelY: 200, big: 124, bigGap: 112, sub: 30, subGap: 48, exactGap: 42, chartGap: 32, footH: 92, gridRows: 2, cols: 3, bh: 112, gap: 16, sLab: 21, sVal: 40, sPad: 22 };
+    // background
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0b1120'); g.addColorStop(1, '#111a2e'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const rg = c.createRadialGradient(W * 0.85, H * 0.06, 10, W * 0.85, H * 0.06, W * 0.75); rg.addColorStop(0, 'rgba(34,197,94,.22)'); rg.addColorStop(1, 'rgba(34,197,94,0)'); c.fillStyle = rg; c.fillRect(0, 0, W, H);
+    c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+    // header: logo + wordmark text
+    if (opts.logo) c.drawImage(opts.logo, P - 8, L.hy, L.ls, L.ls);
+    c.fillStyle = '#e8eefc'; c.font = `800 ${L.brand}px ${FONT}`; c.fillText('Pillar', P + L.ls + 10, L.hy + L.ls * 0.56);
+    c.fillStyle = '#93a1bf'; c.font = `500 ${L.tag}px ${FONT}`; c.fillText('Eat more. Lift smart. Grow.', P + L.ls + 12, L.hy + L.ls * 0.56 + L.tag * 1.45);
+    // hero
+    let y = L.labelY;
+    c.fillStyle = '#93a1bf'; c.font = `600 ${L.label}px ${FONT}`; c.fillText('MY PROGRESS', P, y);
+    y += L.bigGap;
+    c.fillStyle = D.delta >= 0 ? '#4ade80' : '#f87171'; c.font = `800 ${L.big}px ${FONT}`; c.fillText(signed(D.delta) + ' ' + u, P - 6, y);
+    y += L.subGap;
+    c.fillStyle = '#cbd5e1'; c.font = `500 ${L.sub}px ${FONT}`;
+    c.fillText(`since ${fmtDate(D.startDate, { month: 'short', day: 'numeric', year: 'numeric' })} · ${D.weeks} week${D.weeks === 1 ? '' : 's'} tracked`, P, y);
+    if (!opts.hide) { y += L.exactGap; c.fillStyle = '#93a1bf'; c.fillText(`${round(toDispW(D.start), 1)} → ${round(toDispW(D.cur), 1)} ${u}`, P, y); }
+    // vertical budget: footer and stats grid anchored to bottom, chart fills the rest
+    const footTop = H - L.footH;
+    const gridH = L.gridRows * L.bh + (L.gridRows - 1) * L.gap;
+    const gridTop = footTop - (story ? 48 : 28) - gridH;
+    const cy = y + L.chartGap, ch = gridTop - (story ? 40 : 26) - cy;
+    // chart card
+    c.fillStyle = 'rgba(21,31,54,.92)'; rr(c, P, cy, cw, ch, story ? 32 : 26); c.fill(); c.strokeStyle = '#26334f'; c.lineWidth = 2; c.stroke();
+    const th = story ? 62 : 46;
+    c.fillStyle = '#e8eefc'; c.font = `700 ${story ? 34 : 26}px ${FONT}`; c.fillText('Weight trend', P + 32, cy + th);
+    c.fillStyle = '#93a1bf'; c.font = `500 ${story ? 28 : 22}px ${FONT}`; c.textAlign = 'right';
+    c.fillText(`${fmtDate(D.from, { month: 'short', day: 'numeric' })} – ${fmtDate(D.to, { month: 'short', day: 'numeric', year: 'numeric' })}`, P + cw - 32, cy + th); c.textAlign = 'left';
+    const legH = story ? 54 : 40;
+    drawTrend(c, D, opts, { x: P + 32, y: cy + th + (story ? 34 : 24), w: cw - 64, h: ch - th - (story ? 34 : 24) - legH, story });
+    const ly = cy + ch - (story ? 24 : 16); c.font = `500 ${story ? 24 : 19}px ${FONT}`; let lx = P + 32;
+    const leg = (color, label, dash) => { c.strokeStyle = color; c.lineWidth = 5; c.setLineDash(dash || []); c.beginPath(); c.moveTo(lx, ly - 7); c.lineTo(lx + 32, ly - 7); c.stroke(); c.setLineDash([]); c.fillStyle = '#93a1bf'; c.fillText(label, lx + 42, ly); lx += 42 + c.measureText(label).width + 34; };
+    c.fillStyle = '#60a5fa'; c.beginPath(); c.arc(lx + 8, ly - 7, story ? 7 : 6, 0, Math.PI * 2); c.fill(); c.fillStyle = '#93a1bf'; c.fillText('Weigh-ins', lx + 24, ly); lx += 24 + c.measureText('Weigh-ins').width + 34;
+    leg('#22c55e', '7-day avg'); leg('#f59e0b', 'Target pace', [12, 9]);
+    // stats grid
+    const stats = [
+      ['Weekly trend', D.slope == null ? '—' : `${signed(D.slope, 2)} ${u}/wk`],
+      ['Target pace', D.target == null ? '—' : `+${round(D.target, 2)} ${u}/wk`],
+      ['Weeks tracked', String(D.weeks)],
+      ['Food-log streak', `${D.foodStreak} day${D.foodStreak === 1 ? '' : 's'}`],
+      ['Weigh-in streak', `${D.wStreak} day${D.wStreak === 1 ? '' : 's'}`],
+      ['Workouts this week', `${D.workouts} / ${D.workoutGoal}`],
+    ];
+    const bw = (cw - L.gap * (L.cols - 1)) / L.cols;
+    stats.forEach((st, i) => {
+      const bx = P + (i % L.cols) * (bw + L.gap), by = gridTop + Math.floor(i / L.cols) * (L.bh + L.gap);
+      c.fillStyle = 'rgba(21,31,54,.92)'; rr(c, bx, by, bw, L.bh, story ? 26 : 20); c.fill(); c.strokeStyle = '#26334f'; c.lineWidth = 2; c.stroke();
+      c.fillStyle = '#93a1bf'; c.font = `600 ${L.sLab}px ${FONT}`; c.fillText(st[0].toUpperCase(), bx + L.sPad, by + L.bh * 0.36);
+      c.fillStyle = '#e8eefc'; c.font = `800 ${L.sVal}px ${FONT}`; c.fillText(st[1], bx + L.sPad, by + L.bh * 0.78);
+    });
+    // footer
+    c.fillStyle = '#26334f'; c.fillRect(P, footTop, cw, 2);
+    const fy = footTop + (story ? 84 : 56);
+    c.fillStyle = '#4ade80'; c.font = `700 ${story ? 36 : 28}px ${FONT}`; c.fillText('avrgnewb1.github.io/pillar', P, fy);
+    c.fillStyle = '#93a1bf'; c.font = `500 ${story ? 28 : 22}px ${FONT}`; c.textAlign = 'right'; c.fillText('Tracked with Pillar', W - P, fy); c.textAlign = 'left';
+  }
+  function drawTrend(c, D, opts, box) {
+    const pts = D.pts.length >= 2 ? D.pts : D.ws.slice(-2);
+    const ws = D.ws; const base = toDispW(pts[0].kg);
+    const val = kg => opts.hide ? toDispW(kg) - base : toDispW(kg);
+    const x0 = pts[0].date, x1 = D.to; const span = Math.max(6, daysBetween(x0, x1));
+    const avg = pts.map(p => { const xs = ws.filter(w => w.date <= p.date && w.date >= addDays(p.date, -6)); return { date: p.date, kg: xs.reduce((s, w) => s + w.kg, 0) / xs.length }; });
+    const sKg = D.start, sDate = D.startDate, tLb = S.goals ? S.goals.lbwk : 0.375;
+    const tgtAt = d => sKg + (daysBetween(sDate, d) / 7) * tLb * LB;
+    const tStart = sDate > x0 ? sDate : x0; const target = [{ date: tStart, kg: tgtAt(tStart) }, { date: x1, kg: tgtAt(x1) }];
+    const vals = [...pts, ...target].map(p => val(p.kg));
+    let mn = Math.min(...vals), mx = Math.max(...vals); const pad = Math.max(0.4, (mx - mn) * 0.08); mn -= pad; mx += pad;
+    const raw = (mx - mn) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(v => v >= raw) || 10 * mag;
+    mn = Math.floor(mn / step) * step; mx = Math.ceil(mx / step) * step;
+    const L = box.x + (box.story ? 92 : 76), R = box.x + box.w, T = box.y, B = box.y + box.h - (box.story ? 40 : 30);
+    const X = d => L + (daysBetween(x0, d) / span) * (R - L);
+    const Y = kg => T + (1 - (val(kg) - mn) / (mx - mn)) * (B - T);
+    c.font = `500 ${box.story ? 24 : 19}px ${FONT}`; c.textAlign = 'right';
+    const dec = step < 1 ? (step < 0.5 ? 2 : 1) : 0;
+    for (let v = mn; v <= mx + step / 2; v += step) {
+      const yy = T + (1 - (v - mn) / (mx - mn)) * (B - T); const vv = Math.abs(v) < step / 1000 ? 0 : v;
+      c.strokeStyle = '#223050'; c.lineWidth = 2; c.beginPath(); c.moveTo(L, yy); c.lineTo(R, yy); c.stroke();
+      c.fillStyle = '#7f8db0'; c.fillText(opts.hide ? (vv === 0 ? '0' : signed(vv, dec)) : vv.toFixed(dec), L - 14, yy + 8);
+    }
+    c.textAlign = 'center';
+    [x0, x1].forEach((d, i) => { c.textAlign = i ? 'right' : 'left'; c.fillText(fmtDate(d, { month: 'short', day: 'numeric' }), i ? R : L, B + (box.story ? 38 : 28)); });
+    c.textAlign = 'left';
+    // target
+    c.strokeStyle = '#f59e0b'; c.lineWidth = 4; c.setLineDash([12, 9]); c.beginPath(); c.moveTo(X(target[0].date), Y(target[0].kg)); c.lineTo(X(target[1].date), Y(target[1].kg)); c.stroke(); c.setLineDash([]);
+    // area + avg line
+    const grd = c.createLinearGradient(0, T, 0, B); grd.addColorStop(0, 'rgba(34,197,94,.35)'); grd.addColorStop(1, 'rgba(34,197,94,0)');
+    c.beginPath(); avg.forEach((p, i) => i ? c.lineTo(X(p.date), Y(p.kg)) : c.moveTo(X(p.date), Y(p.kg))); c.lineTo(X(avg[avg.length - 1].date), B); c.lineTo(X(avg[0].date), B); c.closePath(); c.fillStyle = grd; c.fill();
+    c.beginPath(); avg.forEach((p, i) => i ? c.lineTo(X(p.date), Y(p.kg)) : c.moveTo(X(p.date), Y(p.kg))); c.strokeStyle = '#22c55e'; c.lineWidth = box.story ? 7 : 6; c.lineJoin = 'round'; c.lineCap = 'round'; c.stroke();
+    c.fillStyle = '#60a5fa'; pts.forEach(p => { c.beginPath(); c.arc(X(p.date), Y(p.kg), box.story ? 7 : 6, 0, Math.PI * 2); c.fill(); });
+  }
+  async function renderShare() {
+    const D = shareData();
+    $('#shareEmpty').hidden = D.ok; $('#shareBody').hidden = !D.ok;
+    if (!D.ok) { $('#shareEmptyCount').textContent = `You have ${D.count} so far.`; return; }
+    $('#shareUnit').textContent = wUnit();
+    $$('#shareFormat button').forEach(b => b.classList.toggle('active', b.dataset.f === share.format));
+    $$('#shareRange button').forEach(b => b.classList.toggle('active', b.dataset.range === S.ui.range));
+    $('#shareHideWeight').checked = share.hide;
+    const logo = await loadLogo();
+    const cv = $('#shareCanvas'); drawCard(cv, D, { format: share.format, hide: share.hide, logo });
+    share.blob = null;
+    share.blob = await new Promise(res => cv.toBlob(b => res(b), 'image/png'));
+    const file = share.blob && new File([share.blob], shareFileName(), { type: 'image/png' });
+    $('#shareNative').hidden = !(file && navigator.canShare && navigator.canShare({ files: [file] }));
+  }
+  const shareFileName = () => `pillar-progress-${share.format}-${today()}.png`;
+  function openShare() { $('#shareSheet').hidden = false; $('#sharePrompt').hidden = true; renderShare(); }
+  function closeShare() { $('#shareSheet').hidden = true; }
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(SITE_URL); toast('Link copied'); }
+    catch (e) {
+      const ta = document.createElement('textarea'); ta.value = SITE_URL; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (e2) { ok = false; } ta.remove();
+      toast(ok ? 'Link copied' : 'Copy this link: ' + SITE_URL);
+    }
+  }
+  function initShare() {
+    document.addEventListener('click', e => { if (e.target.closest('[data-open-share]')) openShare(); });
+    $('#shareClose').addEventListener('click', closeShare);
+    $('#shareSheet').addEventListener('click', e => { if (e.target.id === 'shareSheet') closeShare(); });
+    $('#sharePromptClose').addEventListener('click', () => { $('#sharePrompt').hidden = true; });
+    $('#shareFormat').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (!b) return; share.format = b.dataset.f; renderShare(); });
+    $('#shareRange').addEventListener('click', e => { const b = e.target.closest('[data-range]'); if (!b) return; S.ui.range = b.dataset.range; save(); renderProgress(); renderShare(); });
+    $('#shareHideWeight').addEventListener('change', e => { share.hide = e.target.checked; renderShare(); });
+    $('#shareGoLog').addEventListener('click', () => { closeShare(); showTab('progress'); setTimeout(() => $('#weightInput').focus(), 50); });
+    $('#shareDownload').addEventListener('click', () => {
+      if (!share.blob) return;
+      const a = document.createElement('a'); a.href = URL.createObjectURL(share.blob); a.download = shareFileName(); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500); toast('Image saved');
+    });
+    $('#shareNative').addEventListener('click', async () => {
+      if (!share.blob) return;
+      const file = new File([share.blob], shareFileName(), { type: 'image/png' });
+      try { await navigator.share({ files: [file], title: 'My Pillar progress', text: 'Tracking my gains with Pillar: ' + SITE_URL }); }
+      catch (err) { if (err && err.name !== 'AbortError') toast('Sharing failed. Try Download PNG.'); }
+    });
+    $('#shareCopyLink').addEventListener('click', copyLink);
   }
 
   /* ---------------- Plan ---------------- */
@@ -714,10 +892,10 @@
 
   /* ---------------- Boot ---------------- */
   $('#bottomNav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#foodModal').hidden = true; if (S.profile) $('#onboarding').hidden = true; } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#foodModal').hidden = true; $('#shareSheet').hidden = true; if (S.profile) $('#onboarding').hidden = true; } });
   migrate();
   if (S.profile) S.goals = calc(S.profile);
-  initOnboarding(); initMeals(); initTrain(); initProgress(); initPlan(); initLearn(); renderLearn();
+  initOnboarding(); initMeals(); initTrain(); initProgress(); initPlan(); initLearn(); renderLearn(); initShare();
   if (!S.profile) { S.goals = calc(Object.assign({ age: 22, sex: 'male', heightCm: 178, weightKg: 63.5, activity: 1.55, pace: 'lean', proteinPerKg: 1.8 })); renderAll(); S.goals = null; openOnboarding(); }
   else renderAll();
 
