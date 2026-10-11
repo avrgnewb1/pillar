@@ -128,14 +128,15 @@
   }
   /* Founder */
   .founder { padding-top: 24px; }
-  .founder-inner { display: grid; grid-template-columns: 1fr 1.4fr; gap: 40px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; }
+  .founder-inner { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; }
   .founder-copy h2 { font-size: clamp(1.4rem, 2.6vw, 1.9rem); margin-bottom: 10px; }
   .founder-copy p { margin: 0; }
   .founder-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .founder-photos figure { margin: 0; }
-  .founder-photos img { width: 100%; height: auto; aspect-ratio: 760 / 680; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
+  .founder-photos img { width: 100%; height: auto; aspect-ratio: 760 / 1007; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
   .founder-photos figcaption { margin-top: 6px; font-size: .82rem; font-weight: 600; color: var(--muted); text-align: center; letter-spacing: .04em; text-transform: uppercase; }
   @media (max-width: 760px) { .founder-inner { grid-template-columns: 1fr; gap: 20px; padding: 22px; } }
+  @media (max-width: 560px) { .founder-photos { grid-template-columns: 1fr; gap: 16px; max-width: 340px; margin: 0 auto; width: 100%; } }
 </style>
 </head>
 <body>
@@ -276,15 +277,15 @@
         <div class="founder-photos">
           <figure>
             <picture>
-              <source srcset="./assets/founder/before.webp" type="image/webp">
-              <img src="./assets/founder/before.jpg" alt="The founder before gaining weight" width="760" height="680" loading="lazy" decoding="async">
+              <source srcset="./assets/founder/founder-before.webp" type="image/webp">
+              <img src="./assets/founder/founder-before.jpg" alt="The founder before gaining weight, waist-up mirror photo" width="760" height="1007" loading="lazy" decoding="async">
             </picture>
             <figcaption>Before</figcaption>
           </figure>
           <figure>
             <picture>
-              <source srcset="./assets/founder/after.webp" type="image/webp">
-              <img src="./assets/founder/after.jpg" alt="The founder after gaining weight and building muscle" width="760" height="670" loading="lazy" decoding="async">
+              <source srcset="./assets/founder/founder-after.webp" type="image/webp">
+              <img src="./assets/founder/founder-after.jpg" alt="The founder after gaining weight and building muscle, waist-up mirror photo" width="760" height="1007" loading="lazy" decoding="async">
             </picture>
             <figcaption>After</figcaption>
           </figure>
