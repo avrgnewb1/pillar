@@ -1,3 +1,5 @@
+/* QA pass 1: the hidden attribute always wins over component display rules (PIL-02) */
+[hidden]{display:none!important}
 :root{
   --bg:#0b1120;--bg2:#111a2e;--card:#151f36;--card2:#1b2742;--line:#26334f;
   --text:#e8eefc;--muted:#93a1bf;--accent:#22c55e;--accent2:#16a34a;--blue:#60a5fa;
@@ -62,23 +64,23 @@ select.input{appearance:none;background-image:linear-gradient(45deg,transparent 
 .fill.done{box-shadow:0 0 12px rgba(74,222,128,.6)}
 /* chips */
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
-.chip{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:99px;padding:6px 12px;font-size:.8rem;cursor:pointer;font-family:inherit}
+.chip{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:99px;padding:6px 12px;font-size:.8rem;cursor:pointer;font-family:inherit;min-height:36px}
 .chip.active{background:var(--accent);color:#04210f;border-color:transparent;font-weight:700}
 .food-list{max-height:330px;overflow:auto;border-radius:12px;border:1px solid var(--line)}
 .food{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg2)}
 .food:last-child{border-bottom:0}
 .food .emoji{font-size:1.4rem;width:28px;text-align:center}
 .food .info{flex:1;min-width:0}
-.food .name{font-weight:600;font-size:.92rem}
+.food .name{font-weight:600;font-size:.92rem;overflow-wrap:anywhere}
 .food .meta{font-size:.76rem;color:var(--muted)}
 .food .serv{width:58px;padding:6px;text-align:center}
 .add-btn{background:var(--accent);color:#04210f;border:0;width:34px;height:34px;border-radius:10px;font-size:1.2rem;font-weight:800;cursor:pointer}
 .log-list{list-style:none;margin:0;padding:0}
 .log-list li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px dashed var(--line)}
 .log-list li:last-child{border-bottom:0}
-.log-list .l-main{flex:1;min-width:0}
+.log-list .l-main{flex:1;min-width:0;overflow-wrap:anywhere}
 .log-list .l-sub{font-size:.78rem;color:var(--muted)}
-.del{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:8px}
+.del{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:8px;min-width:36px;min-height:36px}
 .del:hover{color:var(--red);background:rgba(239,68,68,.1)}
 .empty{color:var(--muted);text-align:center;padding:14px;font-size:.88rem}
 .tips{background:linear-gradient(135deg,#132a1f,#151f36)}
@@ -89,7 +91,7 @@ select.input{appearance:none;background-image:linear-gradient(45deg,transparent 
 .seg{display:flex;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
 .seg button{flex:1;background:transparent;border:0;color:var(--muted);padding:9px 8px;border-radius:9px;font-weight:600;cursor:pointer;font-family:inherit;font-size:.86rem}
 .seg button.active{background:var(--card2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
-.seg.mini{padding:2px}.seg.mini button{padding:4px 9px;font-size:.75rem}
+.seg.mini{padding:2px}.seg.mini button{padding:4px 11px;font-size:.75rem;min-height:32px;min-width:36px}
 .seg.inline{display:inline-flex;margin-left:auto}
 .pace-opts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .pace-opts button{background:var(--bg2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:10px 6px;cursor:pointer;text-align:center;font-family:inherit}
@@ -147,7 +149,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 /* overlay */
 .overlay{position:fixed;inset:0;z-index:50;background:rgba(3,7,18,.75);backdrop-filter:blur(6px);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px 12px}
 .overlay[hidden]{display:none}
-.sheet{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;width:100%;max-width:520px;box-shadow:var(--shadow);animation:fade .25s}
+.sheet{position:relative;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;width:100%;max-width:520px;box-shadow:var(--shadow);animation:fade .25s}
 .small-sheet{max-width:420px;margin-top:10vh}
 .small-sheet h2{margin-bottom:12px}
 .ob-head{text-align:center;margin-bottom:16px}
@@ -155,7 +157,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .ob-result{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px;margin:6px 0}
 .ob-result .big{font-size:1.8rem;font-weight:800;color:#4ade80}
 .ob-result .macro{background:var(--card2)}
-.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);background:#052e16;color:#bbf7d0;border:1px solid #166534;padding:10px 16px;border-radius:12px;font-size:.9rem;opacity:0;pointer-events:none;transition:all .25s;z-index:60;white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);background:#052e16;color:#bbf7d0;border:1px solid #166534;padding:10px 16px;border-radius:12px;font-size:.9rem;opacity:0;pointer-events:none;transition:all .25s;z-index:60;white-space:normal;max-width:calc(100vw - 32px);width:max-content;text-align:center;overflow-wrap:anywhere}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (max-width:420px){.grid4{grid-template-columns:repeat(2,1fr)}.stat .v{font-size:1.2rem}.pace-opts small{font-size:.65rem}}
 
@@ -168,14 +170,14 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .qbtn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--line);color:var(--text);border-radius:99px;padding:6px 11px;font-size:.8rem;cursor:pointer;font-family:inherit;white-space:nowrap}
 .qbtn:hover{border-color:var(--accent)}
 .qbtn b{color:#4ade80;font-weight:600;margin-left:4px}
-.fav{background:transparent;border:0;font-size:1.1rem;cursor:pointer;color:var(--muted);padding:2px 4px}
+.fav{background:transparent;border:0;font-size:1.1rem;cursor:pointer;color:var(--muted);padding:2px 4px;min-width:36px;min-height:36px}
 .fav.on{color:#fbbf24}
 .suggest{background:linear-gradient(135deg,#0f2533,#151f36)}
 .sug{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
 .sug:last-child{border-bottom:0}
-.sug .info{flex:1;min-width:0}.sug .name{font-weight:600;font-size:.9rem}.sug .meta{font-size:.76rem;color:var(--muted)}
+.sug .info{flex:1;min-width:0}.sug .name{font-weight:600;font-size:.9rem;overflow-wrap:anywhere}.sug .meta{font-size:.76rem;color:var(--muted)}
 .sug .why{font-size:.72rem;color:var(--blue)}
-#learnSeg{margin-bottom:12px;position:sticky;top:74px;z-index:5}
+#learnSeg{margin-bottom:12px;position:sticky;top:var(--topbar-h, 82px);z-index:5}
 #learnSeg button{font-size:.8rem;padding:8px 4px}
 .pad{padding:0 4px 8px;margin:0}
 .recipe h3{font-size:1rem;margin-bottom:2px}
@@ -228,3 +230,11 @@ details.faq summary span.fq{display:flex;align-items:center;gap:10px}
 .share-empty img{margin:0 auto 6px;display:block}
 .share-empty[hidden],#shareBody[hidden]{display:none}
 .center{text-align:center}
+
+/* QA pass 1 */
+.sheet-close{position:absolute;top:10px;right:10px;width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:1.05rem;cursor:pointer;z-index:2}
+.sheet-close:hover{color:var(--text,#fff)}
+.adj-note{margin-top:6px;color:#fcd34d}
+@media (max-height:700px){.share-preview canvas{max-height:44vh}}
+.small-btn,.qbtn{min-height:36px}
+#weightDate{flex:1.5 1 0;min-width:8.5em}#weightInput{flex:1 1 0}

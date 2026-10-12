@@ -99,7 +99,7 @@
         <div class="card-head"><h2>Log weight</h2></div>
         <div class="row">
           <input type="date" id="weightDate" class="input">
-          <input type="number" id="weightInput" class="input" step="0.1" min="20" inputmode="decimal" placeholder="Weight">
+          <input type="number" id="weightInput" class="input" step="0.1" min="30" inputmode="decimal" placeholder="Weight">
           <span class="unit" id="weightUnitLabel">lb</span>
           <button class="btn primary" id="addWeight">Add</button>
         </div>
@@ -189,11 +189,12 @@
 
 <!-- ONBOARDING -->
 <div class="overlay" id="onboarding" hidden>
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="obTitle">
+    <button type="button" class="sheet-close" id="obClose" aria-label="Close" hidden>✕</button>
     <div class="ob-head">
       <img src="assets/logo.svg" alt="" class="ob-logo" width="72" height="72">
-      <h2>Welcome to Pillar</h2>
-      <p class="muted">Let's work out how much you need to eat to gain weight and build muscle.</p>
+      <h2 id="obTitle">Welcome to Pillar</h2>
+      <p class="muted" id="obIntro">Let's work out how much you need to eat to gain weight and build muscle.</p>
     </div>
     <form id="obForm" novalidate>
       <div class="grid2">
@@ -209,7 +210,7 @@
       </div>
       <div class="field">
         <span>Current weight <span class="seg mini inline" id="obWUnit"><button type="button" data-v="lb" class="active">lb</button><button type="button" data-v="kg">kg</button></span></span>
-        <div class="row"><input class="input" type="number" id="obWeight" min="30" max="700" step="0.1" value="140"><span class="unit" id="obWLabel">lb</span></div>
+        <div class="row"><input class="input" type="number" id="obWeight" min="30" max="660" step="0.1" value="140"><span class="unit" id="obWLabel">lb</span></div>
       </div>
       <label class="field"><span>Activity level</span>
         <select class="input" id="obActivity">
@@ -232,7 +233,8 @@
       </label>
       <div class="ob-result" id="obResult"></div>
       <p class="muted tiny">Estimates only, not medical advice.</p>
-      <button type="submit" class="btn primary block big-btn">Save my plan →</button>
+      <button type="submit" class="btn primary block big-btn" id="obSubmit">Save my plan →</button>
+      <button type="button" class="btn ghost block" id="obCancel" hidden>Cancel</button>
     </form>
   </div>
 </div>

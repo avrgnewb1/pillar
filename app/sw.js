@@ -1,5 +1,5 @@
 /* Pillar service worker: precaches the app shell so it works offline. Personal data lives in localStorage, never in this cache. */
-const CACHE = 'pillar-v2';
+const CACHE = 'pillar-v3';
 const ASSETS = [
   "./",
   "./index.html",
@@ -40,14 +40,28 @@ self.addEventListener('activate', e => {
 });
 
 // Cache-first for same-origin GETs, with a background refresh; navigations fall back to the cached app shell offline.
+// HTML/JS/CSS (the app shell) are network-first with a short timeout, so a new deploy shows on the first
+// launch and index.html/app.js never come from different versions. Images/icons stay cache-first. Offline -> cache.
+const SHELL = /\/(index\.html|app\.js|content\.js|styles\.css|manifest\.json)?$/;
+function putCache(req, res) { if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); } return res; }
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+  if (req.mode === 'navigate' || SHELL.test(url.pathname)) {
+    e.respondWith(new Promise(resolve => {
+      let done = false;
+      const fallback = () => caches.match(req, { ignoreSearch: true })
+        .then(c => c || (req.mode === 'navigate' ? caches.match('./index.html') : undefined))
+        .then(c => c || fetch(req));
+      const timer = setTimeout(() => { if (!done) fallback().then(r => { if (!done) { done = true; resolve(r); } }).catch(() => {}); }, 4000);
+      fetch(req).then(res => { putCache(req, res); if (!done) { done = true; clearTimeout(timer); resolve(res); } })
+        .catch(() => { if (!done) { clearTimeout(timer); done = true; resolve(fallback()); } });
+    }));
+    return;
+  }
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(cached => {
-    const net = fetch(req).then(res => {
-      if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
-      return res;
-    }).catch(() => (req.mode === 'navigate' ? caches.match('./index.html') : undefined));
-    return cached || net;
+    const net = fetch(req).then(res => putCache(req, res)).catch(() => undefined);
+    return cached || net.then(r => r || Response.error());
   }));
 });

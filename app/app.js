@@ -149,9 +149,48 @@
       S.profile.proteinPerKg = Math.min(2.2, Math.max(1.6, round((S.profile.proteinPerLb || 0.82) / LB, 1)));
       delete S.profile.proteinPerLb;
     }
+    S.migrations = S.migrations || {};
+    // QA pass 1 / PIL-01: when the weight unit was switched, the Train tab pre-filled the last value in the OLD unit
+    // and saved it stamped with the NEW unit (e.g. 135 lb saved as "135 kg"). Fix only entries that exactly match
+    // that signature: same number as the previous entry for that exercise, in the other unit (or a repeat of an
+    // entry already fixed this way). Anything the user actually typed differently is left untouched.
+    if (!S.migrations.pil01) {
+      let fixed = 0; const prev = {};
+      (S.workouts || []).forEach(w => (w.exercises || []).forEach(e => {
+        if (!e || !e.weight || !e.unit) return;
+        const pr = prev[e.name];
+        if (pr && pr.unit !== e.unit && e.weight === pr.weight) {
+          const bad = e.weight; e.weight = convW(bad, pr.unit, e.unit); e.fixedFrom = bad; fixed++;
+        } else if (pr && pr.fixedFrom != null && pr.unit === e.unit && e.weight === pr.fixedFrom) {
+          const bad = e.weight; e.weight = pr.weight; e.fixedFrom = bad; fixed++;
+        }
+        prev[e.name] = e;
+      }));
+      S.migrations.pil01 = { at: Date.now(), fixed };
+    }
+    // PIL-03: negative/zero servings could be logged (negative calories). Remove those entries.
+    if (!S.migrations.pil03) {
+      let removed = 0;
+      Object.keys(S.meals || {}).forEach(d => {
+        const before = S.meals[d].length;
+        S.meals[d] = S.meals[d].filter(m => !(m && (!(m.servings > 0) || m.kcal < 0)));
+        removed += before - S.meals[d].length;
+        if (!S.meals[d].length) delete S.meals[d];
+      });
+      S.migrations.pil03 = { at: Date.now(), removed };
+    }
+    S.workouts.forEach(w => w.exercises.forEach(e => { if (e && e.fixedFrom != null && S.migrations.pil01) delete e.fixedFrom; }));
   }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Could not save (storage full?)'); } };
   let viewDate = today();
+  let lastToday = viewDate;
+  // PIL-04: if the app stays open (or is resumed) past midnight, move "Today" to the new day.
+  function syncToday() {
+    const t = today(); if (t === lastToday) return false;
+    const wasToday = viewDate === lastToday; lastToday = t;
+    if (wasToday) viewDate = t;
+    return true;
+  }
   let foodCat = 'All';
   let showAllW = false;
 
@@ -159,6 +198,12 @@
   const toDispW = kg => wUnit() === 'lb' ? kg / LB : kg;
   const fromDispW = v => wUnit() === 'lb' ? v * LB : v;
   const lenUnit = () => (S.profile && S.profile.heightUnit === 'cm') ? 'cm' : 'in';
+  // Convert a lifting weight between units, rounded to the nearest 0.5 (plate-friendly).
+  const convW = (v, from, to) => { if (!v || !from || from === to) return v; return Math.round((to === 'kg' ? v * LB : v / LB) * 2) / 2; };
+  const W_MIN_KG = 30, W_MAX_KG = 300;
+  const fmtGain = lbwk => wUnit() === 'kg' ? `${round(lbwk * LB, 2)} kg (${round(lbwk, 2)} lb)` : `${round(lbwk, 2)} lb (${round(lbwk * LB, 2)} kg)`;
+  // Exercise tips are written in lb; show common kg plate jumps in kg mode.
+  const unitTip = tip => wUnit() === 'kg' ? tip.replace(/(\d+)(?:–(\d+))? lb\b/g, (m, a, b) => { const k = x => ({ 5: '2.5', 10: '5' }[x] || String(round(x * LB, 1))); return (b ? k(a) + '–' + k(b) : k(a)) + ' kg'; }) : tip;
 
   /* ---------------- Calculator ---------------- */
   function calc(p) {
@@ -200,16 +245,29 @@
     const g = calc(p);
     $('#obResult').innerHTML = `<div class="muted small">Your daily target</div><div class="big">${g.kcal.toLocaleString()} kcal</div>
       <div class="muted small">Maintenance ≈ ${g.tdee.toLocaleString()} kcal + ${g.surplus} kcal surplus (${Math.round(g.pct * 100)}%)</div>
-      <div class="muted small">Target gain ≈ ${g.lbwk} lb (${round(g.lbwk * LB, 2)} kg) per week</div>
+      <div class="muted small">Target gain ≈ ${ob.wUnit === 'kg' ? `${round(g.lbwk * LB, 2)} kg (${g.lbwk} lb)` : `${g.lbwk} lb (${round(g.lbwk * LB, 2)} kg)`} per week</div>
+      ${S.profile && S.profile.kcalAdjust ? `<div class="muted small adj-note">${adjKept(p) ? `Your +${S.profile.kcalAdjust} kcal adaptive adjustment is included and will be kept.` : `Saving these changes resets your +${S.profile.kcalAdjust} kcal adaptive adjustment (activity, pace, age, sex, height or a weight change over 2 kg).`}</div>` : ''}
       <div class="macro-grid"><div class="macro"><b>${g.protein} g</b><span>Protein</span></div><div class="macro"><b>${g.carbs} g</b><span>Carbs</span></div><div class="macro"><b>${g.fat} g</b><span>Fat</span></div></div>`;
+  }
+  // Adaptive kcal adjustment survives an "Edit goals" save unless calorie inputs changed (PIL-06).
+  function adjKept(np) {
+    const o = S.profile; if (!o || !o.kcalAdjust) return false;
+    return o.age === np.age && o.sex === np.sex && Math.abs(o.heightCm - np.heightCm) < 0.5 && Math.abs(o.weightKg - np.weightKg) <= 2 && +o.activity === +np.activity && o.pace === np.pace;
   }
   function openOnboarding() {
     const p = S.profile;
+    const edit = !!p;
+    $('#obTitle').textContent = edit ? 'Edit your goals' : 'Welcome to Pillar';
+    $('#obIntro').textContent = edit ? 'Update your details. Your logs and history are kept.' : 'Let\'s work out how much you need to eat to gain weight and build muscle.';
+    $('#obSubmit').textContent = edit ? 'Save changes' : 'Save my plan →';
+    $('#obClose').hidden = !edit; $('#obCancel').hidden = !edit;
     if (p) {
       $('#obAge').value = p.age; ob.sex = p.sex; ob.hUnit = p.heightUnit; ob.wUnit = p.weightUnit; ob.pace = p.pace;
       const totalIn = p.heightCm / IN; $('#obFt').value = Math.floor(totalIn / 12); $('#obIn').value = round(totalIn % 12, 1); $('#obCm').value = Math.round(p.heightCm);
-      const latest = latestWeightKg() || p.weightKg;
-      $('#obWeight').value = round(p.weightUnit === 'lb' ? latest / LB : latest, 1);
+      let latest = latestWeightKg() || p.weightKg;
+      if (!(latest >= W_MIN_KG && latest <= W_MAX_KG)) latest = p.weightKg; // PIL-07: never pre-fill an out-of-range weigh-in
+      const shown = String(round(p.weightUnit === 'lb' ? latest / LB : latest, 1));
+      $('#obWeight').value = shown; ob.lastW = { kg: latest, shown }; ob.prefillKg = latest;
       $('#obActivity').value = String(p.activity); $('#obProtein').value = p.proteinPerKg;
       setSeg('obSex', ob.sex); setSeg('obHUnit', ob.hUnit); setSeg('obWUnit', ob.wUnit); setSeg('obPace', ob.pace);
     }
@@ -235,6 +293,10 @@
       syncObUnits();
     });
     segBind('obPace', 'pace');
+    const closeOb = () => { if (S.profile) $('#onboarding').hidden = true; };
+    $('#obClose').addEventListener('click', closeOb);
+    $('#obCancel').addEventListener('click', closeOb);
+    $('#onboarding').addEventListener('click', e => { if (e.target.id === 'onboarding') closeOb(); });
     $$('#obForm input, #obForm select').forEach(el => el.addEventListener('input', obPreview));
     $('#obForm').addEventListener('submit', e => {
       e.preventDefault();
@@ -243,12 +305,20 @@
       const first = !S.profile;
       p.startDate = (S.profile && S.profile.startDate) || today();
       p.startWeightKg = (S.profile && S.profile.startWeightKg) || p.weightKg;
-      p.kcalAdjust = 0; // recalculating resets adaptive adjustments
+      const oldAdj = S.profile ? (S.profile.kcalAdjust || 0) : 0;
+      const keep = adjKept(p);
+      p.kcalAdjust = keep ? oldAdj : 0; // PIL-06: only reset when calorie inputs changed
       S.profile = p; S.goals = calc(p);
-      if (!S.weights.some(w => w.date === today())) S.weights.push({ date: today(), kg: p.weightKg });
+      const t = today(), existing = S.weights.find(w => w.date === t);
+      if (first) { if (!existing) S.weights.push({ date: t, kg: p.weightKg }); }
+      else if (ob.prefillKg == null || Math.abs(p.weightKg - ob.prefillKg) >= 0.05) {
+        // PIL-08: a changed weight in Edit goals becomes today's weigh-in (single source of truth)
+        if (existing) existing.kg = p.weightKg; else S.weights.push({ date: t, kg: p.weightKg });
+        if (p.startDate === t) p.startWeightKg = p.weightKg; // correcting the weight on day one also corrects the start
+      }
       S.weights.sort((a, b) => a.date.localeCompare(b.date));
       save(); $('#onboarding').hidden = true; renderAll();
-      toast(first ? 'Plan saved! Let\'s grow 💪' : 'Goals updated');
+      toast(first ? 'Plan saved! Let\'s grow 💪' : (oldAdj && !keep ? `Goals updated · +${oldAdj} kcal adjustment reset` : 'Goals updated'));
     });
   }
 
@@ -272,12 +342,17 @@
     return dayMeals(d).reduce((t, m) => { t.kcal += m.kcal; t.protein += m.protein; t.carbs += m.carbs || 0; t.fat += m.fat || 0; return t; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 });
   }
   function addMeal(f, servings) {
-    servings = +servings || 1;
+    if (servings === '' || servings == null) servings = 1;
+    servings = parseFloat(servings);
+    if (!(servings > 0)) { toast('Servings must be more than 0'); return false; }
+    if (servings > 20) { toast('That\'s a lot! Max 20 servings at once'); return false; }
+    if (syncToday()) renderAll();
     (S.meals[viewDate] = S.meals[viewDate] || []).push({
       id: uid(), fid: f.id, name: f.name, servings, kcal: round(f.kcal * servings), protein: round(f.protein * servings, 1),
       carbs: round((f.carbs || 0) * servings, 1), fat: round((f.fat || 0) * servings, 1), t: Date.now(),
     });
     save(); renderToday(); renderQuick(); toast(`+${round(f.kcal * servings)} kcal · ${f.name}`);
+    return true;
   }
   function renderBars() {
     const g = S.goals; if (!g) return;
@@ -332,7 +407,7 @@
   /* Recent & favorites strip */
   function recentFoods() {
     const seen = new Set(), out = [];
-    Object.keys(S.meals).sort().reverse().some(d => { S.meals[d].slice().reverse().forEach(m => { if (m.fid && !seen.has(m.fid) && findFood(m.fid)) { seen.add(m.fid); out.push({ f: findFood(m.fid), s: m.servings }); } }); return out.length >= 8; });
+    Object.keys(S.meals).sort().reverse().some(d => { S.meals[d].slice().reverse().forEach(m => { if (m.fid && m.servings > 0 && !seen.has(m.fid) && findFood(m.fid)) { seen.add(m.fid); out.push({ f: findFood(m.fid), s: m.servings }); } }); return out.length >= 8; });
     return out.slice(0, 8);
   }
   function renderQuick() {
@@ -436,8 +511,10 @@
       e.preventDefault();
       const f = { id: 'c' + uid(), name: $('#fmName').value.trim(), kcal: +$('#fmKcal').value || 0, protein: +$('#fmProt').value || 0, carbs: +$('#fmCarb').value || 0, fat: +$('#fmFat').value || 0 };
       if (!f.name) return;
+      const sv = parseFloat($('#fmServ').value);
+      if (!(sv > 0) || sv > 20) { toast('Servings must be between 0.25 and 20'); return; }
       if ($('#fmSave').checked) { S.customFoods.unshift(f); renderFoods(); }
-      addMeal(f, $('#fmServ').value); $('#foodModal').hidden = true;
+      addMeal(f, sv); $('#foodModal').hidden = true;
     });
     $('#nextTip').addEventListener('click', () => { tipI++; renderTip(); });
     $('#quickStrip').addEventListener('click', e => { const b = e.target.closest('[data-q]'); if (!b) return; const f = findFood(b.dataset.q); if (f) addMeal(f, +b.dataset.s || 1); });
@@ -465,12 +542,13 @@
     const wu = wUnit();
     $('#exerciseList').innerHTML = plan.days[S.ui.day].map(([name, sets, reps, rest, tip], i) => {
       const last = lastFor(name);
-      const lastTxt = last ? `Last: ${last.weight} ${last.unit || wu} × ${last.reps || '?'}` : 'First time';
+      const lastW = last ? convW(last.weight, last.unit || wu, wu) : '';
+      const lastTxt = last ? `Last: ${lastW} ${wu} × ${last.reps || '?'}` : 'First time';
       return `<div class="ex" data-ex="${i}"><div class="ex-top"><div><div class="ex-name">${esc(name)}</div>
         <div class="ex-rx">${sets} sets × ${esc(reps)} reps · rest ${esc(rest)}</div></div><div class="ex-last">${esc(lastTxt)}</div></div>
-        ${tip ? `<div class="ex-tip">↗ ${esc(tip)}</div>` : ''}
+        ${tip ? `<div class="ex-tip">↗ ${esc(unitTip(tip))}</div>` : ''}
         <div class="ex-inputs">
-          <label>Weight (${wu})<input class="input" type="number" step="0.5" min="0" data-f="weight" value="${last ? last.weight : ''}" placeholder="0 = bodyweight"></label>
+          <label>Weight (${wu})<input class="input" type="number" step="0.5" min="0" data-f="weight" value="${last ? lastW : ''}" placeholder="0 = BW"></label>
           <label>Reps (best set)<input class="input" type="text" inputmode="numeric" data-f="reps" placeholder="${esc(reps.split('–').pop())}"></label>
           <label>Sets done<input class="input" type="number" min="0" max="10" data-f="sets" value="${sets}"></label>
         </div></div>`;
@@ -492,7 +570,7 @@
     $('#workoutWeek').textContent = `${thisWeek}/${target} this week`;
     const list = S.workouts.slice().reverse().slice(0, 30);
     $('#workoutHistory').innerHTML = list.length ? list.map(w => `<li><div class="l-main"><div><strong>${esc(w.day)}</strong> <span class="muted small">· ${fmtDate(w.date)}</span></div>
-      <div class="l-sub">${w.exercises.filter(e => e.weight || e.reps).map(e => `${esc(e.name)} ${e.weight ? e.weight + ' ' + (e.unit || '') : 'BW'}${e.reps ? '×' + esc(e.reps) : ''}`).join(' · ') || 'Completed'}${w.notes ? ' · “' + esc(w.notes) + '”' : ''}</div></div>
+      <div class="l-sub">${w.exercises.filter(e => e.weight || e.reps).map(e => `${esc(e.name)} ${e.weight ? convW(e.weight, e.unit || wUnit(), wUnit()) + ' ' + wUnit() : 'BW'}${e.reps ? '×' + esc(e.reps) : ''}`).join(' · ') || 'Completed'}${w.notes ? ' · “' + esc(w.notes) + '”' : ''}</div></div>
       <button class="del" data-del-w="${w.id}" aria-label="Remove">✕</button></li>`).join('')
       : emptyArt('empty-workouts', 'No workouts logged yet. Log your first one above!');
   }
@@ -538,7 +616,7 @@
     $('#weightDate').max = today();
     const ws = sortedWeights(); const t = today();
     const cur = ws.length ? ws[ws.length - 1].kg : null;
-    const start = S.profile ? S.profile.startWeightKg : (ws[0] && ws[0].kg);
+    const sp = startPoint(ws); const start = sp ? sp.kg : null;
     const a7 = avgBetween(ws, addDays(t, -6), t), p7 = avgBetween(ws, addDays(t, -13), addDays(t, -7));
     const recent = ws.filter(w => w.date >= addDays(t, -27));
     const slope = slopeKgPerWeek(recent.length >= 2 ? recent : ws);
@@ -553,7 +631,7 @@
     const card = (k, v, s, cls = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="s">${s}</div></div>`;
     $('#statCards').innerHTML =
       card('Current', fmt(cur), start != null ? `Started at ${fmt(start)}` : '') +
-      card('Total change', delta == null ? '—' : (delta >= 0 ? '+' : '') + round(delta, 1) + ' ' + u, S.profile ? 'since ' + fmtDate(S.profile.startDate, { month: 'short', day: 'numeric' }) : '', delta > 0 ? 'up' : delta < 0 ? 'down' : '') +
+      card('Total change', delta == null ? '—' : (delta >= 0 ? '+' : '') + round(delta, 1) + ' ' + u, sp ? 'since ' + fmtDate(sp.date, { month: 'short', day: 'numeric' }) : '', delta > 0 ? 'up' : delta < 0 ? 'down' : '') +
       card('7-day average', fmt(a7), p7 != null && a7 != null ? `${toDispW(a7) - toDispW(p7) >= 0 ? '+' : ''}${round(toDispW(a7) - toDispW(p7), 1)} ${u} vs prior week` : 'Log a few days to compare') +
       card('Trend', slopeDisp == null ? '—' : (slopeDisp >= 0 ? '+' : '') + round(slopeDisp, 2) + ` ${u}/wk`, `Target +${round(targetDisp, 2)} ${u}/wk`, slopeDisp == null ? '' : slopeDisp > 0 ? 'up' : 'down') +
       card('🔥 Food log streak', foodStreak + (foodStreak === 1 ? ' day' : ' days'), `Weigh-in streak: ${wStreak} day${wStreak === 1 ? '' : 's'}`) +
@@ -563,10 +641,10 @@
     let msg = '';
     if (slope == null || ws.length < 4 || daysBetween(ws[0].date, ws[ws.length - 1].date) < 7) msg = '📅 Weigh in most mornings for at least a week to see your trend vs. target pace.';
     else {
-      const s = slope / LB, tgt = targetLb;
-      if (s < tgt * 0.5) msg = `🐢 You're gaining slower than your target (${round(s, 2)} vs ${tgt} lb/wk). Try adding ~150–250 kcal/day, like a glass of whole milk and a spoon of peanut butter.`;
-      else if (s > tgt * 1.6) msg = `🚀 You're gaining faster than planned (${round(s, 2)} vs ${tgt} lb/wk). Consider trimming ~100–200 kcal/day to keep the gain mostly muscle.`;
-      else msg = `✅ On track! You're gaining ~${round(s, 2)} lb/wk vs a target of ${tgt} lb/wk. Keep it up.`;
+      const s = slopeDisp, tgt = round(targetDisp, 2);
+      if (s < tgt * 0.5) msg = `🐢 You're gaining slower than your target (${round(s, 2)} vs ${tgt} ${u}/wk). Try adding ~150–250 kcal/day, like a glass of whole milk and a spoon of peanut butter.`;
+      else if (s > tgt * 1.6) msg = `🚀 You're gaining faster than planned (${round(s, 2)} vs ${tgt} ${u}/wk). Consider trimming ~100–200 kcal/day to keep the gain mostly muscle.`;
+      else msg = `✅ On track! You're gaining ~${round(s, 2)} ${u}/wk vs a target of ${tgt} ${u}/wk. Keep it up.`;
     }
     $('#paceMsg').textContent = msg;
 
@@ -576,6 +654,12 @@
     renderMeasurements();
     $('#weightHistory').innerHTML = ws.length ? ws.slice().reverse().slice(0, showAllW ? 400 : 10).map(w => `<li><div class="l-main">${fmt(w.kg)}<div class="l-sub">${fmtDate(w.date)}</div></div><button class="del" data-del-wt="${w.date}" aria-label="Remove">✕</button></li>`).join('') + (ws.length > 10 ? `<li class="empty"><button class="btn ghost small-btn" id="toggleW">${showAllW ? 'Show less' : 'Show all ' + ws.length + ' weigh-ins'}</button></li>` : '') : emptyArt('empty-weighins', 'No weigh-ins yet. Add your weight above to start your chart.');
     $$('#rangeSeg button').forEach(b => b.classList.toggle('active', b.dataset.range === S.ui.range));
+  }
+  // Start of the journey: profile start, or an earlier backdated weigh-in if there is one (PIL-14).
+  function startPoint(ws) {
+    const p = S.profile;
+    if (p && p.startDate && p.startWeightKg != null && (!ws.length || ws[0].date >= p.startDate)) return { date: p.startDate, kg: p.startWeightKg };
+    return ws.length ? { date: ws[0].date, kg: ws[0].kg } : (p && p.startWeightKg != null ? { date: p.startDate, kg: p.startWeightKg } : null);
   }
   function renderChart(ws, targetLb) {
     const el = $('#chart');
@@ -589,7 +673,7 @@
     // moving avg (7-day trailing over entries)
     const avg = pts.map(p => { const xs = ws.filter(w => w.date <= p.date && w.date >= addDays(p.date, -6)); return { date: p.date, kg: xs.reduce((s, w) => s + w.kg, 0) / xs.length }; });
     // target line from start weight & date
-    const sDate = S.profile ? S.profile.startDate : ws[0].date, sKg = S.profile ? S.profile.startWeightKg : ws[0].kg;
+    const sp = startPoint(ws); const sDate = sp.date, sKg = sp.kg;
     const tgtAt = d => sKg + (daysBetween(sDate, d) / 7) * targetLb * LB;
     const tStart = sDate > x0 ? sDate : x0;
     const target = [{ date: tStart, kg: tgtAt(tStart) }, { date: t, kg: tgtAt(t) }];
@@ -599,7 +683,7 @@
     const Y = kg => P.t + (1 - (toDispW(kg) - mn) / (mx - mn)) * (H - P.t - P.b);
     const ticks = 4; let grid = '';
     for (let i = 0; i <= ticks; i++) { const v = mn + (mx - mn) * i / ticks; const y = P.t + (1 - i / ticks) * (H - P.t - P.b); grid += `<line x1="${P.l}" x2="${W - P.r}" y1="${y}" y2="${y}" stroke="#26334f" stroke-width="1"/><text x="${P.l - 6}" y="${y + 4}" fill="#93a1bf" font-size="11" text-anchor="end">${round(v, 1)}</text>`; }
-    const xl = [x0, addDays(x0, Math.round(span / 2)), t].map(d => `<text x="${X(d)}" y="${H - 8}" fill="#93a1bf" font-size="11" text-anchor="middle">${fmtDate(d, { month: 'short', day: 'numeric' })}</text>`).join('');
+    const xl = [x0, addDays(x0, Math.round(span / 2)), t].map((d, i) => `<text x="${X(d)}" y="${H - 8}" fill="#93a1bf" font-size="11" text-anchor="${['start', 'middle', 'end'][i]}">${fmtDate(d, { month: 'short', day: 'numeric' })}</text>`).join('');
     const path = arr => arr.map((p, i) => (i ? 'L' : 'M') + X(p.date).toFixed(1) + ' ' + Y(p.kg).toFixed(1)).join(' ');
     const area = pts.length > 1 ? `<path d="${path(avg)} L${X(avg[avg.length - 1].date)} ${H - P.b} L${X(avg[0].date)} ${H - P.b} Z" fill="url(#g)" opacity=".35"/>` : '';
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Weight chart">
@@ -634,8 +718,11 @@
   function initProgress() {
     $('#addWeight').addEventListener('click', () => {
       const v = parseFloat($('#weightInput').value); const d = $('#weightDate').value || today();
-      if (!v || v < 20 || v > 700) { toast('Enter a valid weight'); return; }
+      const u = wUnit(), lo = u === 'lb' ? Math.round(W_MIN_KG / LB) : W_MIN_KG, hi = u === 'lb' ? Math.round(W_MAX_KG / LB) : W_MAX_KG;
+      if (!v || v < lo || v > hi) { toast(`Enter a weight between ${lo} and ${hi} ${u}`); return; }
       if (d > today()) { toast('Date can\'t be in the future'); return; }
+      const sw = sortedWeights(); const ref = sw.filter(w => w.date < d).pop() || sw.find(w => w.date === d) || sw[0];
+      if (ref && Math.abs(fromDispW(v) - ref.kg) / ref.kg > 0.1 && !confirm(`${v} ${u} is more than 10% different from your last weigh-in (${round(toDispW(ref.kg), 1)} ${u}). Save it anyway?`)) return;
       S.weights = S.weights.filter(w => w.date !== d); S.weights.push({ date: d, kg: fromDispW(v) });
       S.weights.sort((a, b) => a.date.localeCompare(b.date));
       $('#weightInput').value = ''; save(); renderProgress(); toast('Weight logged');
@@ -665,8 +752,7 @@
   function shareData() {
     const ws = sortedWeights(); const t = today(); const u = wUnit();
     if (ws.length < 2) return { ok: false, count: ws.length };
-    const start = S.profile && S.profile.startWeightKg != null ? S.profile.startWeightKg : ws[0].kg;
-    const startDate = S.profile && S.profile.startDate && S.profile.startDate <= ws[0].date ? S.profile.startDate : ws[0].date;
+    const sp = startPoint(ws); const start = sp.kg; const startDate = sp.date;
     const last = ws[ws.length - 1];
     const recent = ws.filter(w => w.date >= addDays(t, -27));
     const slope = slopeKgPerWeek(recent.length >= 2 ? recent : ws);
@@ -797,7 +883,8 @@
     $('#shareNative').hidden = !(file && navigator.canShare && navigator.canShare({ files: [file] }));
   }
   const shareFileName = () => `pillar-progress-${share.format}-${today()}.png`;
-  function openShare() { $('#shareSheet').hidden = false; $('#sharePrompt').hidden = true; renderShare(); }
+  function openShare() { share.hide = true; // PIL-17: privacy-safe default every time
+    $('#shareSheet').hidden = false; $('#sharePrompt').hidden = true; renderShare(); }
   function closeShare() { $('#shareSheet').hidden = true; }
   async function copyLink() {
     try { await navigator.clipboard.writeText(SITE_URL); toast('Link copied'); }
@@ -834,7 +921,7 @@
   function renderPlan() {
     const p = S.profile, g = S.goals; if (!p || !g) return;
     const u = wUnit();
-    const h = p.heightUnit === 'cm' ? Math.round(p.heightCm) + ' cm' : `${Math.floor(p.heightCm / IN / 12)}′${round((p.heightCm / IN) % 12, 0)}″`;
+    const h = p.heightUnit === 'cm' ? Math.round(p.heightCm) + ' cm' : (ti => `${Math.floor(ti / 12)}′${ti % 12}″`)(Math.round(p.heightCm / IN));
     $('#planSummary').innerHTML = `<div class="muted small" style="color:#cfe">Your daily target</div><div class="big">${g.kcal.toLocaleString()} kcal</div>
       <div class="small" style="opacity:.85">${esc(PACES[p.pace].label)} · ${ACT[p.activity] || ''} activity</div>
       <div class="macro-grid"><div class="macro"><b>${g.protein} g</b><span>Protein</span></div><div class="macro"><b>${g.carbs} g</b><span>Carbs</span></div><div class="macro"><b>${g.fat} g</b><span>Fat</span></div></div>`;
@@ -848,8 +935,8 @@
       row('Protein', `${p.proteinPerKg} g/kg × ${round(p.weightKg, 1)} kg = ${g.protein} g (≈${round(p.proteinPerKg * LB, 2)} g/lb)`) +
       row('Fat', `25% of calories = ${g.fat} g`) +
       row('Carbs', `the rest = ${g.carbs} g`) +
-      row('Target gain', `${+(g.gain * 100).toFixed(3)}% bodyweight ≈ ${g.lbwk} lb (${round(g.lbwk * LB, 2)} kg)/week`) +
-      `<p class="tiny">Based on a 10–20% surplus over maintenance and 0.25–0.5% bodyweight gain per week (Iraki et al., 2019), with protein at 1.6–2.2 g/kg/day (Morton et al., 2018). The NHS suggests roughly 300–500 extra kcal/day. Treat these as starting estimates: if your weekly average stalls for 2+ weeks, Pillar will suggest +100–150 kcal. Recalculate every ~10 lb gained.</p>`;
+      row('Target gain', `${+(g.gain * 100).toFixed(3)}% bodyweight ≈ ${fmtGain(g.lbwk)}/week`) +
+      `<p class="tiny">Based on a 10–20% surplus over maintenance and 0.25–0.5% bodyweight gain per week (Iraki et al., 2019), with protein at 1.6–2.2 g/kg/day (Morton et al., 2018). The NHS suggests roughly 300–500 extra kcal/day. Treat these as starting estimates: if your weekly average stalls for 2+ weeks, Pillar will suggest +100–150 kcal. Recalculate every ~${u === 'kg' ? '5 kg' : '10 lb'} gained.</p>`;
   }
   function initPlan() {
     $('#redoOnboarding').addEventListener('click', openOnboarding);
@@ -898,6 +985,15 @@
   initOnboarding(); initMeals(); initTrain(); initProgress(); initPlan(); initLearn(); renderLearn(); initShare();
   if (!S.profile) { S.goals = calc(Object.assign({ age: 22, sex: 'male', heightCm: 178, weightKg: 63.5, activity: 1.55, pace: 'lean', proteinPerKg: 1.8 })); renderAll(); S.goals = null; openOnboarding(); }
   else renderAll();
+
+  // PIL-04: roll "Today" over when the app is resumed or left open past midnight
+  const onWake = () => { if (syncToday()) renderAll(); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) onWake(); });
+  window.addEventListener('focus', onWake);
+  setInterval(onWake, 60000);
+  // PIL-19: keep the sticky Learn bar just under the real top bar height
+  const setTopH = () => { const tb = document.querySelector('.topbar'); if (tb) document.documentElement.style.setProperty('--topbar-h', Math.ceil(tb.getBoundingClientRect().height) + 'px'); };
+  setTopH(); window.addEventListener('resize', setTopH);
 
   /* PWA: register the service worker (http/https only; skipped when opened from file://) */
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
